@@ -117,14 +117,15 @@ make_repo_url() {
 
 main() {
   local -ri _opts_separator_index=$(get_index '--' "$@")
+  local -ri _opts_offset=$((_opts_separator_index + 1))
+
   local -a _git_clone_opts
-  local -i _shift_index
 
   if [[ $_opts_separator_index -gt 0 ]]; then
-    _shift_index=$((_opts_separator_index + 1))
-    _git_clone_opts=("${@:1:${_shift_index}}")
-    shift $_shift_index
+    _git_clone_opts=("${@:1:${_opts_offset}}")
   fi
+
+  shift $_opts_offset
 
   local -ra _repo_url_segments=("$@")
   local -r _repo_url=$(make_repo_url "${_repo_url_segments[@]}")
