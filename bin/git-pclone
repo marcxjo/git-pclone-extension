@@ -1,0 +1,188 @@
+#!/bin/bash
+
+#
+# git-pclone - simplified Git repository management
+#
+
+# Variables ####################################################################
+
+declare -r SCRIPT_NAME="${0##*/}"
+declare SRC_ROOT="${GIT_PCLONE_SRC_ROOT:-${PWD}}"
+declare PCLONE_PROTOCOL=${GIT_PCLONE_PROTOCOL:-'ssh'}
+
+# TFM ##########################################################################
+
+usage() {
+  cat <<EOF
+NAME
+    $SCRIPT_NAME - simplified Git repository management
+
+SYNOPSIS
+    git pclone [GIT_CLONE_OPTS --] PATH_SEGMENTS
+    git pclone -h
+
+DESCRIPTION
+    $SCRIPT_NAME adds three main capabilities to the default git-clone
+    mechanism:
+
+    * Cloning via pathbuilder syntax (i.e., providing repository paths as
+      space-separated string arrays rather than traditional URLs) - this enables
+      novel functionality like using simple shell completion to populate
+      common repository providers in your workflow
+    * Cloning to a predictable directory tree structure, enabling, e.g.,
+      convenient management of forked repositories and identically named
+      repositories
+    * Updating existing repositories via the same syntax - if the repository
+      already exists in the target directory, $SCRIPT_NAME will simply call
+      \`git pull\' on that repository
+
+
+    Options:
+
+    GIT_CLONE_OPTS
+        Any options accepted by the buit-in \`git clone\` command.
+
+    -h|--help
+        Prints this help message and immediately exits with status 0
+
+    Operands:
+
+    PATH_SEGMENTS
+        The segments of the full repository URL, including the top-level
+        domain, separated by spaces rather than slashes
+        Note that the ".git" suffix associated with the repository should be
+        omitted, even if it is typically part of the URL, and no URL scheme
+        (e.g., "https://" or "git://") should be specified 
+
+
+    Environment variables:
+
+    GIT_PCLONE_SRC_ROOT
+        If set, then the repository path will be created under the specified
+        directory, otherwise it will be created under the current working
+        directory
+
+    GIT_PCLONE_PROTOCOL
+        If set to 'https', then cloning will be attempted via HTTPS, otherwise
+        cloning will be attempted via SSH
+        It is assumed that the user's SSH config contains a host configuration
+        whose name matches the provided repository path root; e.g., for an
+        invocation of the form \`git pclone github.com user repo-name\` with
+        \`GIT_PCLONE_PROTOCOL\` set to 'ssh', a clone will be attempted against
+        the URL \`github.com:/user/repo-name.git\`
+
+EOF
+}
+
+# Functions ####################################################################
+
+join_array() {
+  local -r _delimiter="$1"
+  local -ra _arr=("${@:2}")
+
+  (
+    IFS="$_delimiter"
+    echo "${_arr[*]}"
+  )
+}
+
+build_path() {
+  local -ar _segments=("$@")
+
+  # HACK - overwriting a global variable with a local one
+  # Any cleaner way I can find to do this is also unnecessarily verbose
+  join_array '/' "${_segments[@]}"
+}
+
+make_repo_subtree() {
+  local -ra _path_segments=("$@")
+
+  join_array '/' "${_path_segments[@]}"
+}
+
+get_index() {
+  local -r _needle="$1"
+
+  [[ -z "$_needle" ]] &&
+    echo -1 &&
+    return 1
+
+  local -r _haystack=("${@:2}")
+
+  [[ ${#_haystack[@]} -le 0 ]] &&
+    echo -1 &&
+    return 1
+
+  for x in "${!_haystack[@]}"; do
+    if [[ "${_haystack[$x]}" = "$_needle" ]]; then
+      echo "$x"
+    fi
+  done
+}
+
+make_repo_url_https() {
+  local -ra _path_segments=("$@")
+
+  echo "https://$(build_path "${_path_segments[@]}").git"
+}
+
+make_repo_url_ssh() {
+  local -r _path_root="$1"
+  local -ra _local_path=("${@:2}")
+
+  echo "${_path_root}:$(build_path "${_local_path[@]}").git"
+}
+
+make_repo_url() {
+  local _repo_url
+
+  if [[ "$PCLONE_PROTOCOL" == 'https' ]]; then
+    _repo_url=$(make_repo_url_https "$@")
+  else
+    _repo_url=$(make_repo_url_ssh "$@")
+  fi
+
+  echo "$_repo_url"
+}
+
+################################################################################
+
+main() {
+  local -ri _opts_separator_index=$(get_index '--' "$@")
+  local -a _git_clone_opts
+  local -i _shift_index
+
+  if [[ $_opts_separator_index -gt 0 ]]; then
+    _shift_index=$((_opts_separator_index + 1))
+    _git_clone_opts=("${@:1:${_shift_index}}")
+    shift $_shift_index
+  fi
+
+  local -ra _repo_url_segments=("$@")
+  local -r _repo_url=$(make_repo_url "${_repo_url_segments[@]}")
+  local -r _repo_subtree=$(make_repo_subtree "${_repo_url_segments[@]}")
+
+  REPO_DIR="${SRC_ROOT}/${_repo_subtree}"
+
+  mkdir -p "${SRC_ROOT}"
+
+  if [[ -d ${REPO_DIR} ]]; then
+    echo "Updating repository at ${REPO_DIR}..."
+    GIT_DIR="${REPO_DIR}/.git" git pull
+  else
+    echo "Cloning repository to ${REPO_DIR}..."
+    git clone "${_git_clone_opts[@]}" "${_repo_url}" "${REPO_DIR}"
+  fi
+}
+
+case "$1" in
+'-h' | '--help')
+  usage
+
+  exit 0
+  ;;
+esac
+
+main "$@"
+
+exit 0
