@@ -7,8 +7,14 @@
 # Variables ####################################################################
 
 declare -r SCRIPT_NAME="${0##*/}"
+declare -r GIT_PCLONE_LIB_DIR="${GIT_PCLONE_LIB_DIR:-${HOME}/.local/lib/git-pclone}"
+
 declare SRC_ROOT="${GIT_PCLONE_SRC_ROOT:-${PWD}}"
 declare PCLONE_PROTOCOL=${GIT_PCLONE_PROTOCOL:-'ssh'}
+
+# Hint to shellcheck that we do source library scripts
+# shellcheck source=../lib/common.sh
+. "${GIT_PCLONE_LIB_DIR%/}/common.sh"
 
 # TFM ##########################################################################
 
@@ -76,48 +82,10 @@ EOF
 
 # Functions ####################################################################
 
-join_array() {
-  local -r _delimiter="$1"
-  local -ra _arr=("${@:2}")
-
-  (
-    IFS="$_delimiter"
-    echo "${_arr[*]}"
-  )
-}
-
-build_path() {
-  local -ar _segments=("$@")
-
-  # HACK - overwriting a global variable with a local one
-  # Any cleaner way I can find to do this is also unnecessarily verbose
-  join_array '/' "${_segments[@]}"
-}
-
 make_repo_subtree() {
   local -ra _path_segments=("$@")
 
   join_array '/' "${_path_segments[@]}"
-}
-
-get_index() {
-  local -r _needle="$1"
-
-  [[ -z "$_needle" ]] &&
-    echo -1 &&
-    return 1
-
-  local -r _haystack=("${@:2}")
-
-  [[ ${#_haystack[@]} -le 0 ]] &&
-    echo -1 &&
-    return 1
-
-  for x in "${!_haystack[@]}"; do
-    if [[ "${_haystack[$x]}" = "$_needle" ]]; then
-      echo "$x"
-    fi
-  done
 }
 
 make_repo_url_https() {
