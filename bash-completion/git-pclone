@@ -1,0 +1,7 @@
+#!/bin/bash
+
+. /usr/share/bash-completion/completions/git
+
+_git_pclone() {
+  _git_clone
+}
