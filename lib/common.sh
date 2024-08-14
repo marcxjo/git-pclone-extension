@@ -39,6 +39,10 @@ get_index() {
   for x in "${!_haystack[@]}"; do
     if [[ "${_haystack[$x]}" = "$_needle" ]]; then
       echo "$x"
+      return
     fi
   done
+
+  echo -1
+  return 1
 }
